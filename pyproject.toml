@@ -14,4 +14,4 @@ dependencies = [
 dev-dependencies = []
 
 [tool.vercel]
-entrypoint = "src.fastapi-demo.main:app"
+entrypoint = "src.fastapi_demo.main:app"
