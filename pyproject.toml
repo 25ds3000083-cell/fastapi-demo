@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 dependencies = [
     "fastapi>=0.139.0",
+    "magnum>=22.0.0",
     "pydantic[email]>=2.13.4",
     "redis>=8.0.1",
     "uvicorn[standard]>=0.49.0",
@@ -12,6 +13,3 @@ dependencies = [
 
 [tool.uv]
 dev-dependencies = []
-
-[tool.vercel]
-entrypoint = "src.fastapi_demo.main:app"
