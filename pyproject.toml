@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 dependencies = [
     "fastapi>=0.139.0",
+    "jwt>=1.4.0",
     "mangum",
     "pydantic[email]>=2.13.4",
     "redis>=8.0.1",
