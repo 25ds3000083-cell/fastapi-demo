@@ -41,17 +41,17 @@ app.add_middleware(
 # Custom middleware to override origin for /analytics only
 app.add_middleware(SelectiveCORSMiddleware)
 
-# @app.middleware("http")
-# async def add_headers(request: Request, call_next):
-#     start = perf_counter()
-#     request_id = str(uuid4())
+@app.middleware("http")
+async def add_headers(request: Request, call_next):
+    start = perf_counter()
+    request_id = str(uuid4())
 
-#     response = await call_next(request)
+    response = await call_next(request)
 
-#     process_time = max(perf_counter() - start, 0.0)
-#     response.headers["X-Request-ID"] = request_id
-#     response.headers["X-Process-Time"] = f"{process_time:.6f}"
-#     return response
+    process_time = max(perf_counter() - start, 0.0)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time"] = f"{process_time:.6f}"
+    return response
 
 
 @app.get("/stats")
