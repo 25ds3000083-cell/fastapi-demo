@@ -6,32 +6,52 @@ from uuid import uuid4
 from pydantic import BaseModel
 import jwt
 from typing import Optional, List, Dict
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
 
 app = FastAPI()
 
 ALLOWED_ORIGINS = ["https://dash-lnxsv8.example.com", "https://exam.sanand.workers.dev"]
 YOUR_EMAIL = "25ds3000083@ds.study.iitm.ac.in"  # replace with your real logged-in email
 
+
+class SelectiveCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Let the default CORS middleware run first
+        response = await call_next(request)
+        path = request.url.path
+        # For /analytics, force Access-Control-Allow-Origin: *
+        if path == "/analytics":
+            # Remove any existing origin set by CORSMiddleware
+            response.headers["Access-Control-Allow-Origin"] = "*"
+
+        return response
+
+
+# Standard CORS for all routes (restricted origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Custom middleware to override origin for /analytics only
+app.add_middleware(SelectiveCORSMiddleware)
 
-@app.middleware("http")
-async def add_headers(request: Request, call_next):
-    start = perf_counter()
-    request_id = str(uuid4())
+# @app.middleware("http")
+# async def add_headers(request: Request, call_next):
+#     start = perf_counter()
+#     request_id = str(uuid4())
 
-    response = await call_next(request)
+#     response = await call_next(request)
 
-    process_time = max(perf_counter() - start, 0.0)
-    response.headers["X-Request-ID"] = request_id
-    response.headers["X-Process-Time"] = f"{process_time:.6f}"
-    return response
+#     process_time = max(perf_counter() - start, 0.0)
+#     response.headers["X-Request-ID"] = request_id
+#     response.headers["X-Process-Time"] = f"{process_time:.6f}"
+#     return response
 
 
 @app.get("/stats")
