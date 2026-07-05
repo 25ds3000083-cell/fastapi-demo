@@ -8,7 +8,9 @@ import jwt
 from typing import Optional, List, Dict
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-
+from fastapi.responses import PlainTextResponse
+from collections import deque
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 
 app = FastAPI()
 
@@ -16,15 +18,38 @@ ALLOWED_ORIGINS = ["https://dash-lnxsv8.example.com", "https://exam.sanand.worke
 YOUR_EMAIL = "25ds3000083@ds.study.iitm.ac.in"  # replace with your real logged-in email
 
 
+# Startup time
+started = perf_counter()
+
+# In-memory log buffer
+logs = deque(maxlen=1000)
+
+# Prometheus counter
+http_requests_total = Counter("http_requests_total", "Total HTTP requests")
+
+
 class SelectiveCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Let the default CORS middleware run first
+        request_id = str(uuid4())
+        http_requests_total.inc()
         response = await call_next(request)
+
+        logs.append(
+            {
+                "level": "INFO",
+                "ts": perf_counter(),
+                "path": request.url.path,
+                "request_id": request_id,
+            }
+        )
+
         path = request.url.path
         # For /analytics, force Access-Control-Allow-Origin: *
         if path == "/analytics":
             # Remove any existing origin set by CORSMiddleware
             response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["X-Request-ID"] = request_id
 
         return response
 
@@ -40,6 +65,7 @@ app.add_middleware(
 
 # Custom middleware to override origin for /analytics only
 app.add_middleware(SelectiveCORSMiddleware)
+
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
@@ -136,7 +162,6 @@ class AnalyticsResponse(BaseModel):
 
 # --- Your assigned values ---
 API_KEY = "ak_f15dl7dq4ii90bors6szlpt2"
-YOUR_EMAIL = "25ds3000083@ds.study.iitm.ac.in"
 
 
 @app.post("/analytics")
@@ -199,3 +224,27 @@ async def analytics_endpoint(
     resp = JSONResponse(content=response_data.model_dump())
     resp.headers["Access-Control-Allow-Origin"] = "*"
     return resp
+
+
+@app.get("/work")
+def work(n: int):
+    # Simulate work
+    for _ in range(n):
+        pass
+
+    return {"email": YOUR_EMAIL, "done": n}
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok", "uptime_s": perf_counter() - started}
+
+
+@app.get("/logs/tail")
+def tail(limit: int = 10):
+    return list(logs)[-limit:]
+
+
+@app.get("/metrics")
+def metrics():
+    return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)

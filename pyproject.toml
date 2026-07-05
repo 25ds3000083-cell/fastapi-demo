@@ -6,6 +6,7 @@ readme = "README.md"
 dependencies = [
     "fastapi>=0.139.0",
     "mangum",
+    "prometheus-client>=0.25.0",
     "pydantic[email]>=2.13.4",
     "pyjwt>=2.13.0",
     "redis>=8.0.1",
