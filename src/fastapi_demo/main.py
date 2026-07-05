@@ -6,20 +6,40 @@ from uuid import uuid4
 from pydantic import BaseModel
 import jwt
 from typing import Optional, List, Dict
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
 
 app = FastAPI()
 
-ALLOWED_ORIGINS = ["https://dash-lnxsv8.example.com"]
+ALLOWED_ORIGINS = ["https://dash-lnxsv8.example.com", "https://exam.sanand.workers.dev"]
 YOUR_EMAIL = "25ds3000083@ds.study.iitm.ac.in"  # replace with your real logged-in email
 
+
+class SelectiveCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Let the default CORS middleware run first
+        response = await call_next(request)
+        path = request.url.path
+        # For /analytics, force Access-Control-Allow-Origin: *
+        if path == "/analytics":
+            # Remove any existing origin set by CORSMiddleware
+            response.headers["Access-Control-Allow-Origin"] = "*"
+
+        return response
+
+
+# Standard CORS for all routes (restricted origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Custom middleware to override origin for /analytics only
+app.add_middleware(SelectiveCORSMiddleware)
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
@@ -51,6 +71,7 @@ async def stats(values: str):
         "max": maximum,
         "mean": round(mean, 2),
     }
+
 
 # Verify Endpoint
 PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
@@ -93,6 +114,7 @@ def verify_token(body: VerifyRequest):
         print(e)
         raise HTTPException(status_code=401, detail={"valid": False})
 
+
 # Analytics Endpoint
 class Event(BaseModel):
     user: str
@@ -111,16 +133,18 @@ class AnalyticsResponse(BaseModel):
     revenue: float
     top_user: Optional[str] = None
 
+
 # --- Your assigned values ---
 API_KEY = "ak_f15dl7dq4ii90bors6szlpt2"
 YOUR_EMAIL = "25ds3000083@ds.study.iitm.ac.in"
 
-app.post('/analytics')
+
+@app.post("/analytics")
 async def analytics_endpoint(
     request: Request,
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
-     # 1. Auth: check API key
+    # 1. Auth: check API key
     if x_api_key is None or x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
