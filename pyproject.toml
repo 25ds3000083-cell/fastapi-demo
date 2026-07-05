@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 dependencies = [
+    "cryptography>=49.0.0",
     "fastapi>=0.139.0",
     "mangum",
     "prometheus-client>=0.25.0",
