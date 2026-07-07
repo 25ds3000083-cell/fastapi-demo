@@ -14,9 +14,12 @@ from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 import re
 import json
 import requests
+import os
+from dotenv import load_dotenv
 
 app = FastAPI()
 
+load_dotenv()
 ALLOWED_ORIGINS = ["https://dash-lnxsv8.example.com", "https://exam.sanand.workers.dev"]
 YOUR_EMAIL = "25ds3000083@ds.study.iitm.ac.in"  # replace with your real logged-in email
 
@@ -257,7 +260,7 @@ def metrics():
 """
 This part is for /extract wala from
 """
-LLM_URL = "https://least-profit-african-content.trycloudflare.com/v1/chat/completions"
+LLM_URL = f"{os.getenv("CLOUDFLARED_URL")}/v1/chat/completions"
 MODEL = "google/gemma-4-e4b:2"
 
 
