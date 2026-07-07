@@ -58,8 +58,9 @@ class SelectiveCORSMiddleware(BaseHTTPMiddleware):
         )
 
         path = request.url.path
+        method = request.method
         # For /analytics, force Access-Control-Allow-Origin: *
-        if path == "/analytics":
+        if (path == "/analytics") or (path == "/orders" and method == "GET"):
             # Remove any existing origin set by CORSMiddleware
             response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["X-Request-ID"] = request_id
