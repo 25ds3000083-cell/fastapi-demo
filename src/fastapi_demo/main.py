@@ -371,15 +371,9 @@ TOTAL_ORDERS = 57  # <-- set this to your assigned T
 
 # For idempotent order creation:
 # idempotency_key -> order dict
-idempotency_store: Dict[str, Dict[str, Any]] = {}
 
-# For the fixed catalog of orders (IDs 1..T)
-# We'll pre-create them at startup.
-orders_catalog: Dict[int, Dict[str, Any]] = {
-    i: {"id": i, "name": f"Order {i}"}  # add more fields if needed
-    for i in range(1, TOTAL_ORDERS + 1)
-}
-
+all_orders: List[Dict[str, Any]] = []
+idempotency_index: Dict[str, int] = {}
 # ----- 1. Idempotent order creation -----
 
 
@@ -387,29 +381,24 @@ orders_catalog: Dict[int, Dict[str, Any]] = {
 async def create_order(
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
 ):
-    # Require idempotency key for this assignment
     if not idempotency_key:
         raise HTTPException(
             status_code=400,
             detail="Idempotency-Key header is required",
         )
 
-    # If we've already processed this key, return the stored order
-    if idempotency_key in idempotency_store:
-        order = idempotency_store[idempotency_key]
-        # Conventional to use 200 for repeated idempotent calls
-        return order
+    # If we've already created an order for this key, return it
+    if idempotency_key in idempotency_index:
+        idx = idempotency_index[idempotency_key]
+        return all_orders[idx]
 
-    # First time for this key: create a new order
+    # First time: create a new order
     order_id = str(uuid4())
-    order = {
-        "id": order_id,
-        # Add any other fields your assignment expects:
-        "status": "created",
-    }
+    order = {"id": order_id}  # top-level "id" as required
 
-    # Store it so future calls with the same key return the same order
-    idempotency_store[idempotency_key] = order
+    # Store order and remember its index for this key
+    all_orders.append(order)
+    idempotency_index[idempotency_key] = len(all_orders) - 1
 
     return order
 
@@ -428,45 +417,41 @@ def encode_cursor(order_id: int) -> str:
 
 def decode_cursor(cursor: str) -> int:
     """
-    Decode cursor back to order ID.
-    If invalid, we'll treat as starting from 1.
+    Decode cursor back to list index.
+    If invalid or out of range, treat as 0 (start).
     """
     try:
-        return int(cursor)
+        idx = int(cursor)
+        if idx < 0:
+            return 0
+        return idx
     except (ValueError, TypeError):
-        # Invalid cursor → start from beginning
-        return 1
+        return 0
 
 
 @app.get("/orders")
 async def list_orders(
-    limit: int = Query(10, ge=1, le=100),  # adjust max as you like
+    limit: int = Query(10, ge=1, le=100),
     cursor: Optional[str] = Query(None),
 ):
-    # Determine starting ID
-    if cursor is None:
-        start_id = 1
-    else:
-        start_id = decode_cursor(cursor)
-        # Ensure we stay within bounds
-        if start_id < 1:
-            start_id = 1
-        elif start_id > TOTAL_ORDERS:
-            # No items left
-            return {"items": [], "next_cursor": None}
+    start_index = 0 if cursor is None else decode_cursor(cursor)
 
-    # Collect up to `limit` orders from start_id .. TOTAL_ORDERS
+    # Clamp start_index to valid range
+    if start_index >= len(all_orders):
+        return {"items": [], "next_cursor": None}
+
+    # Collect up to `limit` orders
     items: List[Dict[str, Any]] = []
-    current_id = start_id
+    current_index = start_index
 
-    while current_id <= TOTAL_ORDERS and len(items) < limit:
-        items.append(orders_catalog[current_id])
-        current_id += 1
+    while current_index < len(all_orders) and len(items) < limit:
+        items.append(all_orders[current_index])
+        current_index += 1
 
     # Determine next cursor
-    if current_id > TOTAL_ORDERS:
-        next_cursor = None  # no more items
+    if current_index >= len(all_orders):
+        next_cursor = None
     else:
-        next_cursor = encode_cursor(current_id)
+        next_cursor = encode_cursor(current_index)
 
     return {"items": items, "next_cursor": next_cursor}
