@@ -11,6 +11,9 @@ from starlette.responses import Response
 from fastapi.responses import PlainTextResponse
 from collections import deque
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+import re
+import json
+import requests
 
 app = FastAPI()
 
@@ -249,3 +252,68 @@ def tail(limit: int = 10):
 @app.get("/metrics")
 def metrics():
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+
+
+'''
+This part is for /extract wala from
+'''
+LLM_URL = "http://localhost:1234/v1/chat/completions"
+MODEL = "google/gemma-4-e4b:2"
+
+
+class ExtractRequest(BaseModel):
+    text: str
+
+
+class InvoiceResponse(BaseModel):
+    vendor: str
+    amount: float
+    currency: str
+    date: str
+
+
+@app.post("/extract", response_model=InvoiceResponse)
+def extract_invoice(req: ExtractRequest):
+    text = req.text.strip()
+
+    # Handle empty input safely
+    if not text:
+        return InvoiceResponse(vendor="", amount=0, currency="USD", date="1970-01-01")
+
+    prompt = f"""
+Extract invoice fields from the text below.
+
+Return ONLY valid JSON:
+{{
+  "vendor": "string",
+  "amount": number,
+  "currency": "3-letter uppercase currency code",
+  "date": "YYYY-MM-DD"
+}}
+
+Invoice:
+{text}
+"""
+
+    response = requests.post(
+        LLM_URL,
+        headers={"Content-Type": "application/json"},
+        json={
+            "model": MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        },
+        timeout=60,
+    )
+
+    result = response.json()
+
+    content = result["choices"][0]["message"]["content"]
+
+    # Extract JSON if model adds extra text
+    match = re.search(r"\{.*\}", content, re.S)
+    data = json.loads(match.group())
+
+    return InvoiceResponse(**data)
