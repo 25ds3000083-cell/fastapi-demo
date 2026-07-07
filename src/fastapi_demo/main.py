@@ -410,8 +410,7 @@ async def create_order(
     # Store it so future calls with the same key return the same order
     idempotency_store[idempotency_key] = order
 
-    # Return 201 on first creation
-    return order, 201
+    return order
 
 
 # ----- 2. Cursor pagination over fixed catalog -----
