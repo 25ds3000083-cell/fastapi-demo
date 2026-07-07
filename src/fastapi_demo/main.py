@@ -11,9 +11,15 @@ from starlette.responses import Response
 from fastapi.responses import PlainTextResponse
 from collections import deque
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+import re
+import json
+import requests
+import os
+from dotenv import load_dotenv
 
 app = FastAPI()
 
+load_dotenv()
 ALLOWED_ORIGINS = ["https://dash-lnxsv8.example.com", "https://exam.sanand.workers.dev"]
 YOUR_EMAIL = "25ds3000083@ds.study.iitm.ac.in"  # replace with your real logged-in email
 
@@ -109,6 +115,7 @@ ed+zclR6BcmNNo/WVfJ4xyCLSf0BCOgdTgW6PdaChd1l9VDetJZVEgC5tkyvXsfI
 SI6iyrYbKR0NEBSqq4XkadEjsCs4F1RncsS4LlgniT7GlkL9Mce3b0wGLs9/7ZIX
 dQIDAQAB
 -----END PUBLIC KEY-----"""
+
 
 EXPECTED_ISS = "https://idp.exam.local"
 EXPECTED_AUD = "tds-yf86g1jp.apps.exam.local"
@@ -248,3 +255,66 @@ def tail(limit: int = 10):
 @app.get("/metrics")
 def metrics():
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+"""
+This part is for /extract wala from
+"""
+LLM_URL = f"{os.getenv("CLOUDFLARED_URL")}/v1/chat/completions"
+MODEL = "google/gemma-4-e4b:2"
+
+
+class ExtractRequest(BaseModel):
+    text: str
+
+
+class InvoiceResponse(BaseModel):
+    vendor: str
+    amount: float
+    currency: str
+    date: str
+
+
+@app.post("/extract", response_model=InvoiceResponse)
+def extract_invoice(req: ExtractRequest):
+    text = req.text.strip()
+
+    # Handle empty input safely
+    if not text:
+        return InvoiceResponse(vendor="", amount=0, currency="USD", date="1970-01-01")
+    print(text)
+    prompt = f"""
+Extract invoice fields from the text below.
+
+Return ONLY valid JSON:
+{{
+  "vendor": "string",
+  "amount": number,
+  "currency": "3-letter uppercase currency code",
+  "date": "YYYY-MM-DD"
+}}
+
+Invoice:
+{text}
+"""
+
+    response = requests.post(
+        LLM_URL,
+        headers={"Content-Type": "application/json"},
+        json={
+            "model": MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        },
+        timeout=180,
+    )
+
+    result = response.json()
+
+    content = result["choices"][0]["message"]["content"]
+
+    # Extract JSON if model adds extra text
+    match = re.search(r"\{.*\}", content, re.S)
+    data = json.loads(match.group())
+    print(data)
+    return InvoiceResponse(**data)
