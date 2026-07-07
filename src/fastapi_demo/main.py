@@ -254,12 +254,10 @@ def metrics():
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-
-
-'''
+"""
 This part is for /extract wala from
-'''
-LLM_URL = "http://localhost:1234/v1/chat/completions"
+"""
+LLM_URL = "http://192.168.56.1:1234/v1/chat/completions"
 MODEL = "google/gemma-4-e4b:2"
 
 
@@ -281,7 +279,7 @@ def extract_invoice(req: ExtractRequest):
     # Handle empty input safely
     if not text:
         return InvoiceResponse(vendor="", amount=0, currency="USD", date="1970-01-01")
-
+    print(text)
     prompt = f"""
 Extract invoice fields from the text below.
 
@@ -305,7 +303,7 @@ Invoice:
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
         },
-        timeout=60,
+        timeout=180,
     )
 
     result = response.json()
@@ -315,5 +313,5 @@ Invoice:
     # Extract JSON if model adds extra text
     match = re.search(r"\{.*\}", content, re.S)
     data = json.loads(match.group())
-
+    print(data)
     return InvoiceResponse(**data)
