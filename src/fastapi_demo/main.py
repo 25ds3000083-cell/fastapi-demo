@@ -257,7 +257,7 @@ def metrics():
 """
 This part is for /extract wala from
 """
-LLM_URL = "http://192.168.56.1:1234/v1/chat/completions"
+LLM_URL = "https://least-profit-african-content.trycloudflare.com/v1/chat/completions"
 MODEL = "google/gemma-4-e4b:2"
 
 
