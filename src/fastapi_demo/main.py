@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse  # noqa: F401
-from time import perf_counter
+from time import perf_counter, time
 from uuid import uuid4
 from pydantic import BaseModel
 import jwt
@@ -9,7 +9,7 @@ from typing import Optional, List, Dict
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from fastapi.responses import PlainTextResponse
-from collections import deque
+from collections import deque, defaultdict
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 import re
 import json
@@ -20,7 +20,11 @@ from dotenv import load_dotenv
 app = FastAPI()
 
 load_dotenv()
-ALLOWED_ORIGINS = ["https://dash-lnxsv8.example.com", "https://exam.sanand.workers.dev"]
+ALLOWED_ORIGINS = [
+    "https://dash-lnxsv8.example.com",
+    "https://exam.sanand.workers.dev",
+    "https://app-bkdpxh.example.com",
+]
 YOUR_EMAIL = "25ds3000083@ds.study.iitm.ac.in"  # replace with your real logged-in email
 
 
@@ -37,8 +41,11 @@ http_requests_total = Counter("http_requests_total", "Total HTTP requests")
 class SelectiveCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Let the default CORS middleware run first
-        request_id = str(uuid4())
+        request_id = request.headers.get("X-Request-ID")
+        if not request_id:
+            request_id = str(uuid4())
         http_requests_total.inc()
+        request.state.request_id = request_id
         response = await call_next(request)
 
         logs.append(
@@ -64,13 +71,42 @@ class SelectiveCORSMiddleware(BaseHTTPMiddleware):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Custom middleware to override origin for /analytics only
 app.add_middleware(SelectiveCORSMiddleware)
+
+
+# Bucket config
+RATE_LIMIT = 13  # B
+WINDOW_SECONDS = 10
+
+# client_id -> list of request timestamps
+client_requests = defaultdict(list)
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    client_id = request.headers.get("X-Client-Id")
+    if not client_id:
+        return await call_next(request)
+
+    now = time()
+    client_requests[client_id] = [
+        ts for ts in client_requests[client_id] if now - ts < WINDOW_SECONDS
+    ]
+
+    if len(client_requests[client_id]) >= RATE_LIMIT:
+        return Response(
+            status_code=429,
+            content="Too Many Requests",
+        )
+
+    client_requests[client_id].append(now)
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -260,7 +296,7 @@ def metrics():
 """
 This part is for /extract wala from
 """
-LLM_URL = f"{os.getenv("CLOUDFLARED_URL")}/v1/chat/completions"
+LLM_URL = f"{os.getenv('CLOUDFLARED_URL')}/v1/chat/completions"
 MODEL = "google/gemma-4-e4b:2"
 
 
@@ -318,3 +354,10 @@ Invoice:
     data = json.loads(match.group())
     print(data)
     return InvoiceResponse(**data)
+
+
+# For the Pagination API
+@app.get("/ping")
+async def ping(request: Request):
+    request_id = request.state.request_id
+    return {"email": YOUR_EMAIL, "request_id": request_id}
