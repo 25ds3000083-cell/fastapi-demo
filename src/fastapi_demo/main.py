@@ -455,3 +455,40 @@ async def list_orders(
         next_cursor = encode_cursor(current_index)
 
     return {"items": items, "next_cursor": next_cursor}
+
+
+@app.get(path="/effective-config")
+def config(set: Optional[List[str]] = Query(None)):
+    def str_to_bool(val: str) -> bool:
+        if isinstance(val, bool):
+            return val
+        s = str(val).strip().lower()
+        return s in ("true", "1", "yes", "on")
+
+    coerced = {
+        "port": 8000,
+        "workers": 1,
+        "debug": False,
+        "log_level": "info",
+        "api_key": "****",
+    }
+
+    if set:
+        for item in set:
+            if "=" not in item:
+                continue
+            key, _, value = item.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if key in coerced:
+                #:,Coerce according to key type
+                if key in ("port", "workers"):
+                    coerced[key] = int(value)
+                elif key == "debug":
+                    coerced[key] = str_to_bool(value)
+                    print(coerced[key], value)
+                elif key == "api_key":
+                    coerced[key] = "****"
+                else:
+                    coerced[key] = value
+    return coerced
